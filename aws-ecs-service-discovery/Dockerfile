@@ -1,4 +1,4 @@
-FROM python:3
+FROM python:2.7
 
 MAINTAINER Brad Folkens <bfolkens@gmail.com>
 
