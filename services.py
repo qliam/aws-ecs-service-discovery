@@ -17,14 +17,15 @@ import argparse
 import logging
 import os
 import re
-import boto
+import boto3
 
-ecs = boto.connect_ec2containerservice()
-ec2 = boto.connect_ec2()
-route53 = boto.connect_route53()
+ecs = boto3.client('ecs')
+ec2 = boto3.client('ec2')
+route53 = boto3.client('route53')
 
 logging.basicConfig(format='%(asctime)s %(message)s',
                     datefmt='%Y/%m/%d/ %I:%M:%S %p')
+logging.getLogger().setLevel(logging.INFO)
 log = logging.info
 
 if 'ECS_CLUSTER' in os.environ:
@@ -33,8 +34,9 @@ elif os.path.exists('/etc/ecs/ecs.config'):
     pat = re.compile(r'\bECS_CLUSTER\b\s*=\s*(\w*)')
     cluster = pat.findall(open('/etc/ecs/ecs.config').read())[-1]
 else:
-    cluster = None
+    cluster = 'Default'
 
+log('cluster identified as: {0}'.format(cluster))
 
 class MultipleTasksRunningForService(Exception):
 
@@ -48,60 +50,62 @@ class MultipleTasksRunningForService(Exception):
 
 def get_task_definition_arns():
     """Request all API pages needed to get Task Definition ARNS."""
-    next_token = []
+    next_token = ''
     arns = []
     while next_token is not None:
-        detail = ecs.list_task_definitions(next_token=next_token)
-        detail = detail['ListTaskDefinitionsResponse']
-        detail = detail['ListTaskDefinitionsResult']
+        detail = ecs.list_task_definitions(status='ACTIVE', nextToken=next_token)
         arns.extend(detail['taskDefinitionArns'])
-        next_token = detail['nextToken']
+        if 'nextToken' in detail:
+          next_token = detail['nextToken']
+        else:
+          next_token = None
     return arns
 
 
 def get_task_definition_families():
     """Ignore duplicate tasks in the same family."""
-    arns = get_task_definition_arns()
-    families = {}
-    for arn in arns:
-        match = pattern_arn.match(arn)
-        if match:
-            groupdict = match.groupdict()
-            families[groupdict['family']] = True
-    return families.keys()
+    next_token = ''
+    arns = []
+    while next_token is not None:
+        detail = ecs.list_task_definition_families()
+        arns.extend(detail['families'])
+        if 'nextToken' in detail:
+          next_token = detail['nextToken']
+        else:
+          next_token = None
+    return arns
 
 
 def get_task_arn(family):
     """Get the ARN of running task, given the family name."""
     response = ecs.list_tasks(cluster=cluster, family=family)
-    arns = response['ListTasksResponse']['ListTasksResult']['taskArns']
+    arns = response['taskArns']
     if len(arns) == 0:
         return None
     if len(arns) > 1:
         raise MultipleTasksRunningForService
-    return arns[0]
+    return arns[0].encode('UTF-8')
 
 
 def get_task_container_instance_arn(task_arn):
     """Get the ARN for the container instance a give task is running on."""
-    response = ecs.describe_tasks(task_arn, cluster=cluster)
-    response = response['DescribeTasksResponse']
-    return response['DescribeTasksResult']['tasks'][0]['containerInstanceArn']
+    response = ecs.describe_tasks(cluster=cluster, tasks=[task_arn])
+    return response['tasks'][0]['containerInstanceArn'].encode('UTF-8')
 
 
 def get_container_instance_ec2_id(container_instance_arn):
     """Id the EC2 instance serving as the container instance."""
     detail = ecs.describe_container_instances(
-        container_instances=container_instance_arn, cluster=cluster)
-    detail = detail['DescribeContainerInstancesResponse']
-    detail = detail['DescribeContainerInstancesResult']['containerInstances']
-    return detail[0]['ec2InstanceId']
+        cluster=cluster,
+        containerInstances=[container_instance_arn.encode('UTF-8')])
+    return detail['containerInstances'][0]['ec2InstanceId'].encode('UTF-8')
 
 
-def get_ec2_interface(ec2_instance_id):
+def get_ec2_instance(ec2_instance_id):
     """Get the primary interface for the given EC2 instance."""
-    return ec2.get_all_instances(filters={
-        'instance-id': ec2_instance_id})[0].instances[0].interfaces[0]
+    filter = [{'Name': 'instance-id', 'Values': [ec2_instance_id]}]
+    instances = ec2.describe_instances(Filters=filter)
+    return instances['Reservations'][0]['Instances'][0]['NetworkInterfaces'][0]
 
 
 def get_zone_for_vpc(vpc_id):
@@ -117,11 +121,11 @@ def get_zone_for_vpc(vpc_id):
     one VPC. (But, why would you expect internal DNS for 2 different private
     networks to be the same anyway?)
     """
-    response = route53.get_all_hosted_zones()['ListHostedZonesResponse']
+		response = route53.list_hosted_zones()
     for zone in response['HostedZones']:
-        zone_id = zone['Id'].split('/')[-1]
-        detail = route53.get_hosted_zone(zone_id)['GetHostedZoneResponse']
-        if 'VPCs' in detail and detail['VPCs']['VPC']['VPCId'] == vpc_id:
+        zone_id = zone['Id']#.split('/')[-1]
+				detail = route53.get_hosted_zone(Id=zone_id)
+				if 'VPCs' in detail and detail['VPCs'][0]['VPCId'] == vpc_id:
             return {'zone_id': zone_id, 'zone_name': zone['Name']}
 
 
@@ -148,23 +152,39 @@ def get_info():
         name = family[:-8]
         container_instance_arn = get_task_container_instance_arn(service_arn)
         ec2_instance_id = get_container_instance_ec2_id(container_instance_arn)
-        ec2_interface = get_ec2_interface(ec2_instance_id)
-        container_instance_internal_ip = ec2_interface.private_ip_address
+        ec2_instance = get_ec2_instance(ec2_instance_id)
+        container_instance_private_ip = ec2_instance['PrivateIpAddress']
         _services = {k: v for (k, v) in locals().iteritems() if k[0] != '_'}
         _info['services'].append(_services)
         # No need to get common network info on each loop over tasks
         if 'vpc_id' not in _info['network']:
-            _info['network'].update(get_zone_for_vpc(ec2_interface.vpc_id))
-            _info['network']['vpc_id'] = ec2_interface.vpc_id
+            _info['network'].update(get_zone_for_vpc(ec2_instance['VpcId']))
+            _info['network']['vpc_id'] = ec2_instance['VpcId']
     return _info
 
 
 def dns(zone_id, zone_name, service_name, service_ip, ttl=20):
     """Insert or update DNS record."""
-    rrs = boto.route53.record.ResourceRecordSets(route53, zone_id)
-    rrs.add_change('UPSERT', '{service_name}.{zone_name}'.format(**locals()),
-                   'A', ttl).add_value(service_ip)
-    rrs.commit()
+    record = {
+      'Comment': 'string',
+      'Changes': [
+        {
+          'Action': 'UPSERT',
+          'ResourceRecordSet': {
+            'Name': '{service_name}.{zone_name}'.format(**locals()),
+            'Type': 'A',
+            'TTL': ttl,
+            'ResourceRecords': [
+              {
+                'Value': service_ip
+              },
+            ]
+          }
+        }
+      ]
+    }
+
+    rrs = route53.change_resource_record_sets(HostedZoneId=zone_id, ChangeBatch=record)
     return rrs
 
 
@@ -183,9 +203,9 @@ def update_services(service_names=[], verbose=False):
         if verbose:
             log('Registering {0}.{1} as {2}'.format(
                 service['name'], info['network']['zone_name'],
-                service['container_instance_internal_ip']))
+                service['container_instance_private_ip']))
         dns(info['network']['zone_id'], info['network']['zone_name'],
-            service['name'], service['container_instance_internal_ip'])
+            service['name'], service['container_instance_private_ip'])
 
 
 def cli():
