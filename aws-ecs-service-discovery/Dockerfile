@@ -1,4 +1,4 @@
-FROM dockerfile/python
+FROM registry.hub.docker.com/_/python
 
 MAINTAINER Brad Folkens <bfolkens@gmail.com>
 
