@@ -121,7 +121,7 @@ def get_zone_for_vpc(vpc_id):
     for zone in response['HostedZones']:
         zone_id = zone['Id'].split('/')[-1]
         detail = route53.get_hosted_zone(zone_id)['GetHostedZoneResponse']
-        if detail['VPCs']['VPC']['VPCId'] == vpc_id:
+        if 'VPCs' in detail and detail['VPCs']['VPC']['VPCId'] == vpc_id:
             return {'zone_id': zone_id, 'zone_name': zone['Name']}
 
 
