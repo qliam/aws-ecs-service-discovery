@@ -120,3 +120,7 @@ If all this Elastic Cloud SOA has you wishing it was 2006 again, I've got good n
 [Automated Build Repository]: https://registry.hub.docker.com/u/richardbronosky/aws-ecs-service-discovery/
 [it is simple]: https://registry.hub.docker.com/u/richardbronosky/aws-ecs-service-discovery/dockerfile/
 [Ambassador Pattern]: https://docs.docker.com/articles/ambassador_pattern_linking/
+
+### Fork
+
+This fork includes some important bugfixes not yet included in upstream master.
