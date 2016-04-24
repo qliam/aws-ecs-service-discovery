@@ -38,16 +38,6 @@ else:
 
 log('cluster identified as: {0}'.format(cluster))
 
-class MultipleTasksRunningForService(Exception):
-
-    """It's assumed that there should be only 1 task running for a service.
-
-    Am I wrong? Tell me.
-    """
-
-    pass
-
-
 def get_task_definition_arns():
     """Request all API pages needed to get Task Definition ARNS."""
     next_token = ''
@@ -78,12 +68,10 @@ def get_task_definition_families():
 
 def get_task_arn(family):
     """Get the ARN of running task, given the family name."""
-    response = ecs.list_tasks(cluster=cluster, family=family)
+    response = ecs.list_tasks(cluster=cluster, family=family, desiredStatus='RUNNING')
     arns = response['taskArns']
     if len(arns) == 0:
         return None
-    if len(arns) > 1:
-        raise MultipleTasksRunningForService
     return arns[0].encode('UTF-8')
 
 
