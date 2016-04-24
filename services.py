@@ -121,11 +121,11 @@ def get_zone_for_vpc(vpc_id):
     one VPC. (But, why would you expect internal DNS for 2 different private
     networks to be the same anyway?)
     """
-		response = route53.list_hosted_zones()
+    response = route53.list_hosted_zones()
     for zone in response['HostedZones']:
         zone_id = zone['Id']#.split('/')[-1]
-				detail = route53.get_hosted_zone(Id=zone_id)
-				if 'VPCs' in detail and detail['VPCs'][0]['VPCId'] == vpc_id:
+        detail = route53.get_hosted_zone(Id=zone_id)
+        if 'VPCs' in detail and detail['VPCs'][0]['VPCId'] == vpc_id:
             return {'zone_id': zone_id, 'zone_name': zone['Name']}
 
 
