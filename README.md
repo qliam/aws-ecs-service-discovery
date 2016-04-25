@@ -15,8 +15,8 @@ This project aims to solve the need for service discovery on AWS ECS is then **s
 
 ### What it does
 
-1. Identify tasks that are services.
-2. Get the internal IP of the host of each service.
+1. Gather the list of services from the cluster.
+2. Get the internal IP of the host of each service's PRIMARY task.
 3. Create or update a record in the Amazon Route53 private DNS to point to the service
 4. **Die**\*
 
@@ -110,7 +110,7 @@ Back when you used to run your MySQL backed PHP app on a single server, you woul
 
 But then Amazon came along with their elastic everything and now you never know what IP address anything has or which host it is running on until after it's started. So much for setting up an [Ambassador Pattern].
 
-If all this Elastic Cloud SOA has you wishing it was 2006 again, I've got good news. If you follow a few naming conventions and add this container to your Task Definition files, you're back there. All the naming and addressing is handled for you. Not with a hack. With what is arguably the most power DNS solution on the planet. Amazon Route53.
+If all this Elastic Cloud SOA has you wishing it was 2006 again, I've got good news. If you add this container to your Task Definition files, you're back there. All the naming and addressing is handled for you. Not with a hack. With what is arguably the most power DNS solution on the planet. Amazon Route53.
 
 ### Design Goals
 

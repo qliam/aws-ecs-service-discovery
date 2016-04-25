@@ -38,42 +38,51 @@ else:
 
 log('cluster identified as: {0}'.format(cluster))
 
-def get_task_definition_arns():
-    """Request all API pages needed to get Task Definition ARNS."""
+def get_task_arns():
+    """Request all API pages needed to get Task ARNS."""
     next_token = ''
     arns = []
     while next_token is not None:
-        detail = ecs.list_task_definitions(status='ACTIVE', nextToken=next_token)
-        arns.extend(detail['taskDefinitionArns'])
+        detail = ecs.list_tasks(cluster=cluster, desiredStatus='RUNNING', nextToken=next_token)
+        arns.extend(detail['taskArns'])
         if 'nextToken' in detail:
           next_token = detail['nextToken']
         else:
           next_token = None
     return arns
 
-
-def get_task_definition_families():
-    """Ignore duplicate tasks in the same family."""
+def get_service_arns():
+    """Request all API pages needed to get Service ARNS."""
     next_token = ''
     arns = []
     while next_token is not None:
-        detail = ecs.list_task_definition_families()
-        arns.extend(detail['families'])
+        detail = ecs.list_services(cluster=cluster, nextToken=next_token)
+        arns.extend(detail['serviceArns'])
         if 'nextToken' in detail:
           next_token = detail['nextToken']
         else:
           next_token = None
     return arns
 
+def get_primary_task_for_service(service_arn):
+    """Get the task ARN of the primary service"""
+    response = ecs.describe_services(cluster=cluster, services=[service_arn])
+    for deployment in response['services'][0]['deployments']:
+        if deployment['status'] == 'PRIMARY':
+            return get_task_for_task_definition(deployment['taskDefinition'])
+    return None
 
-def get_task_arn(family):
-    """Get the ARN of running task, given the family name."""
-    response = ecs.list_tasks(cluster=cluster, family=family, desiredStatus='RUNNING')
-    arns = response['taskArns']
-    if len(arns) == 0:
-        return None
-    return arns[0].encode('UTF-8')
-
+def get_task_for_task_definition(task_definition):
+    """Get the ARN of running task, given the task definition."""
+    next_token = ''
+    arns = []
+    while next_token is not None:
+        task_arns = get_task_arns()
+        tasks = ecs.describe_tasks(cluster=cluster, tasks=task_arns)['tasks']
+        for task in tasks:
+            if task['taskDefinitionArn'] == task_definition:
+                return task
+    return None
 
 def get_task_container_instance_arn(task_arn):
     """Get the ARN for the container instance a give task is running on."""
@@ -125,20 +134,21 @@ def get_info():
     return value.
     """
     _info = {'services': [], 'network': {'cluster': cluster}}
-    _families = get_task_definition_families()
-    for family in _families:
-        if family[-8:] != '-service':
-            log('    (Found non-service {family})'.format(**locals()))
+    _service_arns = get_service_arns()
+    for service_arn in _service_arns:
+        service = ecs.describe_services(cluster=cluster, services=[service_arn])['services'][0]
+        name = service['serviceName']
+        log('{name} service found'.format(**locals()))
+
+        task = get_primary_task_for_service(service_arn)
+        task_arn = task['taskArn']
+        if not task_arn:
+            # service doesn't have a PRIMARY, skip it
+            log('no PRIMARY task found for {name}'.format(**locals()))
             continue
-        log('{family} service found'.format(**locals()))
-        service_arn = get_task_arn(family)
-        if not service_arn:
-            # task is not running, skip it
-            log('{family} is not running'.format(**locals()))
-            continue
-        log('{family} is RUNNING'.format(**locals()))
-        name = family[:-8]
-        container_instance_arn = get_task_container_instance_arn(service_arn)
+        log('  {task_arn} is PRIMARY'.format(**locals()))
+
+        container_instance_arn = task['containerInstanceArn']
         ec2_instance_id = get_container_instance_ec2_id(container_instance_arn)
         ec2_instance = get_ec2_instance(ec2_instance_id)
         container_instance_private_ip = ec2_instance['PrivateIpAddress']
