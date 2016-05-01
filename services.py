@@ -64,31 +64,26 @@ def get_service_arns():
           next_token = None
     return arns
 
-def get_primary_task_for_service(service_arn):
+def get_primary_tasks_for_service(service_arn):
     """Get the task ARN of the primary service"""
     response = ecs.describe_services(cluster=cluster, services=[service_arn])
     for deployment in response['services'][0]['deployments']:
         if deployment['status'] == 'PRIMARY':
-            return get_task_for_task_definition(deployment['taskDefinition'])
+            return get_tasks_for_task_definition(deployment['taskDefinition'])
     return None
 
-def get_task_for_task_definition(task_definition):
+def get_tasks_for_task_definition(task_definition):
     """Get the ARN of running task, given the task definition."""
     next_token = ''
     arns = []
-    while next_token is not None:
-        task_arns = get_task_arns()
-        tasks = ecs.describe_tasks(cluster=cluster, tasks=task_arns)['tasks']
-        for task in tasks:
-            if task['taskDefinitionArn'] == task_definition:
-                return task
-    return None
+    tasks = []
 
-def get_task_container_instance_arn(task_arn):
-    """Get the ARN for the container instance a give task is running on."""
-    response = ecs.describe_tasks(cluster=cluster, tasks=[task_arn])
-    return response['tasks'][0]['containerInstanceArn'].encode('UTF-8')
-
+    task_arns = get_task_arns()
+    response = ecs.describe_tasks(cluster=cluster, tasks=task_arns)
+    for task in response['tasks']:
+        if task['taskDefinitionArn'] == task_definition:
+            tasks.append(task)
+    return tasks
 
 def get_container_instance_ec2_id(container_instance_arn):
     """Id the EC2 instance serving as the container instance."""
@@ -140,18 +135,17 @@ def get_info():
         name = service['serviceName']
         log('{name} service found'.format(**locals()))
 
-        task = get_primary_task_for_service(service_arn)
-        task_arn = task['taskArn']
-        if not task_arn:
-            # service doesn't have a PRIMARY, skip it
-            log('no PRIMARY task found for {name}'.format(**locals()))
-            continue
-        log('  {task_arn} is PRIMARY'.format(**locals()))
+        tasks = get_primary_tasks_for_service(service_arn)
+        container_instance_private_ips = []
+        for task in tasks:
+            task_arn = task['taskArn']
+            log('  {task_arn} is PRIMARY'.format(**locals()))
 
-        container_instance_arn = task['containerInstanceArn']
-        ec2_instance_id = get_container_instance_ec2_id(container_instance_arn)
-        ec2_instance = get_ec2_instance(ec2_instance_id)
-        container_instance_private_ip = ec2_instance['PrivateIpAddress']
+            container_instance_arn = task['containerInstanceArn']
+            ec2_instance_id = get_container_instance_ec2_id(container_instance_arn)
+            ec2_instance = get_ec2_instance(ec2_instance_id)
+            container_instance_private_ips.append(ec2_instance['PrivateIpAddress'])
+
         _services = {k: v for (k, v) in locals().iteritems() if k[0] != '_'}
         _info['services'].append(_services)
         # No need to get common network info on each loop over tasks
@@ -161,8 +155,11 @@ def get_info():
     return _info
 
 
-def dns(zone_id, zone_name, service_name, service_ip, ttl=20):
+def dns(zone_id, zone_name, service_name, service_ips, ttl=20):
     """Insert or update DNS record."""
+
+    resourceRecords = map(lambda ip: { 'Value': ip }, service_ips)
+
     record = {
       'Comment': 'string',
       'Changes': [
@@ -172,11 +169,7 @@ def dns(zone_id, zone_name, service_name, service_ip, ttl=20):
             'Name': '{service_name}.{zone_name}'.format(**locals()),
             'Type': 'A',
             'TTL': ttl,
-            'ResourceRecords': [
-              {
-                'Value': service_ip
-              },
-            ]
+            'ResourceRecords': resourceRecords
           }
         }
       ]
@@ -201,9 +194,9 @@ def update_services(service_names=[], verbose=False):
         if verbose:
             log('Registering {0}.{1} as {2}'.format(
                 service['name'], info['network']['zone_name'],
-                service['container_instance_private_ip']))
+                service['container_instance_private_ips']))
         dns(info['network']['zone_id'], info['network']['zone_name'],
-            service['name'], service['container_instance_private_ip'])
+            service['name'], service['container_instance_private_ips'])
 
 
 def cli():
