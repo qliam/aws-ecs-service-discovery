@@ -136,7 +136,7 @@ def get_info():
         log('{name} service found'.format(**locals()))
 
         tasks = get_primary_tasks_for_service(service_arn)
-        container_instance_private_ips = []
+        container_instance_private_ips = set()
         for task in tasks:
             task_arn = task['taskArn']
             log('  {task_arn} is PRIMARY'.format(**locals()))
@@ -144,7 +144,7 @@ def get_info():
             container_instance_arn = task['containerInstanceArn']
             ec2_instance_id = get_container_instance_ec2_id(container_instance_arn)
             ec2_instance = get_ec2_instance(ec2_instance_id)
-            container_instance_private_ips.append(ec2_instance['PrivateIpAddress'])
+            container_instance_private_ips.add(ec2_instance['PrivateIpAddress'])
 
         _services = {k: v for (k, v) in locals().iteritems() if k[0] != '_'}
         _info['services'].append(_services)
@@ -194,7 +194,7 @@ def update_services(service_names=[], verbose=False):
         if verbose:
             log('Registering {0}.{1} as {2}'.format(
                 service['name'], info['network']['zone_name'],
-                service['container_instance_private_ips']))
+                ', '.join(service['container_instance_private_ips'])))
         dns(info['network']['zone_id'], info['network']['zone_name'],
             service['name'], service['container_instance_private_ips'])
 
