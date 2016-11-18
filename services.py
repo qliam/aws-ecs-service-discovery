@@ -144,7 +144,8 @@ def get_info():
             container_instance_arn = task['containerInstanceArn']
             ec2_instance_id = get_container_instance_ec2_id(container_instance_arn)
             ec2_instance = get_ec2_instance(ec2_instance_id)
-            container_instance_private_ips.add(ec2_instance['PrivateIpAddress'])
+            if ec2_instance:
+                container_instance_private_ips.add(ec2_instance['PrivateIpAddress'])
 
         _services = {k: v for (k, v) in locals().iteritems() if k[0] != '_'}
         _info['services'].append(_services)
