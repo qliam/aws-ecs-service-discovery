@@ -137,22 +137,23 @@ def get_info():
 
         tasks = get_primary_tasks_for_service(service_arn)
         container_instance_private_ips = set()
-        for task in tasks:
-            task_arn = task['taskArn']
-            log('  {task_arn} is PRIMARY'.format(**locals()))
+        if tasks:
+            for task in tasks:
+                task_arn = task['taskArn']
+                log('  {task_arn} is PRIMARY'.format(**locals()))
 
-            container_instance_arn = task['containerInstanceArn']
-            ec2_instance_id = get_container_instance_ec2_id(container_instance_arn)
-            ec2_instance = get_ec2_instance(ec2_instance_id)
-            if ec2_instance:
-                container_instance_private_ips.add(ec2_instance['PrivateIpAddress'])
+                container_instance_arn = task['containerInstanceArn']
+                ec2_instance_id = get_container_instance_ec2_id(container_instance_arn)
+                ec2_instance = get_ec2_instance(ec2_instance_id)
+                if ec2_instance:
+                    container_instance_private_ips.add(ec2_instance['PrivateIpAddress'])
 
-        _services = {k: v for (k, v) in locals().iteritems() if k[0] != '_'}
-        _info['services'].append(_services)
-        # No need to get common network info on each loop over tasks
-        if 'vpc_id' not in _info['network']:
-            _info['network'].update(get_zone_for_vpc(ec2_instance['VpcId']))
-            _info['network']['vpc_id'] = ec2_instance['VpcId']
+            _services = {k: v for (k, v) in locals().iteritems() if k[0] != '_'}
+            _info['services'].append(_services)
+            # No need to get common network info on each loop over tasks
+            if 'vpc_id' not in _info['network']:
+                _info['network'].update(get_zone_for_vpc(ec2_instance['VpcId']))
+                _info['network']['vpc_id'] = ec2_instance['VpcId']
     return _info
 
 
