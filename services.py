@@ -30,7 +30,7 @@ logging.getLogger().setLevel(logging.INFO)
 log = logging.info
 cluster = 'pumpkin-docker-cluster-prod'
 
-sys.stdout.write('cluster identified as: {0}'.format(cluster))
+sys.stdout.write('cluster identified as toto: {0}'.format(cluster))
 
 def get_task_arns():
     """Request all API pages needed to get Task ARNS."""
