@@ -34,7 +34,7 @@ elif os.path.exists('/etc/ecs/ecs.config'):
     pat = re.compile(r'\bECS_CLUSTER\b\s*=\s*(\w*)')
     cluster = pat.findall(open('/etc/ecs/ecs.config').read())[-1]
 else:
-    cluster = ' pumpkin-docker-cluster-prod'
+    cluster = 'pumpkin-docker-cluster-prod'
 
 log('cluster identified as: {0}'.format(cluster))
 
