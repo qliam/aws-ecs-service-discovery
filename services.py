@@ -19,9 +19,9 @@ import os
 import re
 import boto3
 
-ecs = boto3.client('ecs')
-ec2 = boto3.client('ec2')
-route53 = boto3.client('route53')
+ecs = boto3.client('ecs', region_name='eu-west-1')
+ec2 = boto3.client('ec2', region_name='eu-west-1')
+route53 = boto3.client('route53', region_name='eu-west-1')
 
 logging.basicConfig(format='%(asctime)s %(message)s',
                     datefmt='%Y/%m/%d/ %I:%M:%S %p')
