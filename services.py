@@ -28,9 +28,16 @@ logging.basicConfig(format='%(asctime)s %(message)s',
                     datefmt='%Y/%m/%d/ %I:%M:%S %p')
 logging.getLogger().setLevel(logging.INFO)
 log = logging.info
-cluster = 'pumpkin-docker-cluster-prod'
 
-sys.stdout.write('cluster identified as toto: {0}'.format(cluster))
+if 'ECS_CLUSTER' in os.environ:
+    cluster = os.environ['ECS_CLUSTER']
+elif os.path.exists('/etc/ecs/ecs.config'):
+    pat = re.compile(r'\bECS_CLUSTER\b\s*=\s*([a-zA-Z0-9\-_]*)')
+    cluster = pat.findall(open('/etc/ecs/ecs.config').read())[-1]
+else:
+    cluster = 'pumpkin-docker-cluster-prod'
+
+sys.stdout.write('cluster identified as: {0}'.format(cluster))
 
 def get_task_arns():
     """Request all API pages needed to get Task ARNS."""
