@@ -18,6 +18,7 @@ import logging
 import os
 import re
 import boto3
+import sys
 
 ecs = boto3.client('ecs', region_name='eu-west-1')
 ec2 = boto3.client('ec2', region_name='eu-west-1')
@@ -36,7 +37,7 @@ elif os.path.exists('/etc/ecs/ecs.config'):
 else:
     cluster = 'pumpkin-docker-cluster-prod'
 
-log('cluster identified as: {0}'.format(cluster))
+sys.stdout.write('cluster identified as: {0}'.format(cluster))
 
 def get_task_arns():
     """Request all API pages needed to get Task ARNS."""
